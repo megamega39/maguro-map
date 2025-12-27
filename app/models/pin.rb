@@ -1,7 +1,7 @@
 class Pin < ApplicationRecord
   belongs_to :user, optional: true # MVPではuser_idは使わないのでoptional
 
-  validates :price, presence: true, numericality: { only_integer: true, greater_than: 0 }
+  validates :price, presence: true, numericality: { only_integer: true, greater_than_or_equal_to: 3000 }
   validates :distance_km, presence: true, numericality: { greater_than: 0 }
   validates :time_slot, presence: true
   validates :weather, presence: true

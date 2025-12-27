@@ -1,11 +1,18 @@
 class Api::PinsController < ApplicationController
-  # CORS対応（必要に応じて）
+  # CORS対応
   skip_before_action :verify_authenticity_token
+
+  # エラーハンドリング
+  rescue_from ActiveRecord::RecordNotFound, with: :record_not_found
+  rescue_from ActionController::ParameterMissing, with: :parameter_missing
 
   # ピンの一覧取得
   def index
     pins = Pin.order(created_at: :desc).limit(1000) # 最新1000件まで
-    render json: pins.map { |pin| pin_json(pin) }
+    render json: {
+      status: "success",
+      data: pins.map { |pin| pin_json(pin) }
+    }
   end
 
   # ピンの作成
@@ -18,11 +25,17 @@ class Api::PinsController < ApplicationController
 
     if pin.save
       render json: {
-        pin: pin_json(pin),
-        delete_token: delete_token # 初回のみ返す
+        status: "success",
+        data: {
+          pin: pin_json(pin),
+          delete_token: delete_token # 初回のみ返す
+        }
       }, status: :created
     else
-      render json: { errors: pin.errors.full_messages }, status: :unprocessable_entity
+      render json: {
+        status: "error",
+        errors: pin.errors.full_messages
+      }, status: :unprocessable_entity
     end
   end
 
@@ -31,28 +44,45 @@ class Api::PinsController < ApplicationController
     pin = Pin.find_by(id: params[:id])
     
     unless pin
-      render json: { error: "Pin not found" }, status: :not_found
+      render json: {
+        status: "error",
+        error: "Pin not found"
+      }, status: :not_found
       return
     end
 
     # delete_tokenで認証
     delete_token = params[:delete_token]
     unless delete_token && BCrypt::Password.new(pin.delete_token_digest) == delete_token
-      render json: { error: "Invalid delete token" }, status: :unauthorized
+      render json: {
+        status: "error",
+        error: "Invalid delete token"
+      }, status: :unauthorized
       return
     end
 
     if pin.destroy
-      render json: { message: "Pin deleted successfully" }, status: :ok
+      render json: {
+        status: "success",
+        message: "Pin deleted successfully"
+      }, status: :ok
     else
-      render json: { errors: pin.errors.full_messages }, status: :unprocessable_entity
+      render json: {
+        status: "error",
+        errors: pin.errors.full_messages
+      }, status: :unprocessable_entity
     end
   end
 
   private
 
   def pin_params
-    params.require(:pin).permit(:price, :distance_km, :time_slot, :weather, :lat, :lng)
+    # JSON形式でもフォーム形式でも受け取れるようにする
+    if params[:pin].present?
+      params.require(:pin).permit(:price, :distance_km, :time_slot, :weather, :lat, :lng)
+    else
+      params.permit(:price, :distance_km, :time_slot, :weather, :lat, :lng)
+    end
   end
 
   def pin_json(pin)
@@ -67,6 +97,20 @@ class Api::PinsController < ApplicationController
       icon_type: pin.icon_type,
       created_at: pin.created_at.iso8601
     }
+  end
+
+  def record_not_found
+    render json: {
+      status: "error",
+      error: "Record not found"
+    }, status: :not_found
+  end
+
+  def parameter_missing(exception)
+    render json: {
+      status: "error",
+      error: "Parameter missing: #{exception.param}"
+    }, status: :bad_request
   end
 end
 

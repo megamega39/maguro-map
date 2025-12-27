@@ -46,12 +46,37 @@ function initMap() {
         center,
         zoom,
         hash: false, // 一時的に無効化（問題が解決したらtrueに戻せる）
+        // 日本国内に表示範囲を限定
+        // 南西端: [122.93, 20.42]（沖縄のさらに南西）
+        // 北東端: [153.98, 45.55]（北海道のさらに北東）
+        maxBounds: [
+            [122.93, 20.42], // 南西端 [経度, 緯度]
+            [153.98, 45.55]  // 北東端 [経度, 緯度]
+        ]
     });
 
-    // 地図の読み込み完了後にリサイズを実行
-    map.on("load", () => {
+    // 地図の読み込み完了後の処理
+    // 重要: 地図が完全に読み込まれてからピンを読み込む
+    const loadPinsAfterMapLoad = () => {
+        console.log("地図の読み込みが完了しました");
         map.resize();
-    });
+        // 少し待ってからピンを読み込む（地図の描画が完全に終わるまで）
+        setTimeout(() => {
+            console.log("ピンの読み込みを開始します");
+            loadPins(map);
+        }, 100);
+    };
+
+    // 地図のloadイベントを待つ
+    if (map.loaded()) {
+        // 地図が既に読み込まれている場合
+        console.log("地図は既に読み込まれています");
+        map.resize();
+        loadPinsAfterMapLoad();
+    } else {
+        // 地図の読み込みを待つ
+        map.once("load", loadPinsAfterMapLoad);
+    }
 
     // ウィンドウリサイズ時にもリサイズ
     window.addEventListener("resize", () => {
@@ -60,9 +85,386 @@ function initMap() {
         }
     });
 
+    // ズームレベルに応じてピンの表示/非表示を切り替える
+    const updatePinVisibility = () => {
+        const currentZoom = map.getZoom();
+        const minZoom = 10; // ズームレベル10未満でピンを非表示
+
+        // すべてのマーカーの表示/非表示を切り替え
+        Object.values(pinMarkers).forEach(marker => {
+            if (marker && marker.getElement) {
+                const markerElement = marker.getElement();
+                if (markerElement) {
+                    // MapLibreが作成する親要素（.maplibregl-marker）を取得
+                    const parentElement = markerElement.parentElement;
+                    if (parentElement && parentElement.classList.contains("maplibregl-marker")) {
+                        if (currentZoom < minZoom) {
+                            // ズームアウト時：ピンを非表示
+                            parentElement.style.display = "none";
+                        } else {
+                            // ズームイン時：ピンを表示
+                            parentElement.style.display = "block";
+                        }
+                    } else {
+                        // 親要素が見つからない場合、マーカー要素自体に設定
+                        if (currentZoom < minZoom) {
+                            markerElement.style.display = "none";
+                        } else {
+                            markerElement.style.display = "block";
+                        }
+                    }
+                }
+            }
+        });
+
+        const visibleCount = Object.values(pinMarkers).filter(marker => {
+            if (marker && marker.getElement) {
+                const el = marker.getElement();
+                if (el) {
+                    const parent = el.parentElement;
+                    if (parent && parent.classList.contains("maplibregl-marker")) {
+                        return parent.style.display !== "none";
+                    }
+                    return el.style.display !== "none";
+                }
+            }
+            return false;
+        }).length;
+
+        console.log(`ズームレベル: ${currentZoom.toFixed(2)}, ピン表示: ${currentZoom >= minZoom ? "ON" : "OFF"} (表示中: ${visibleCount}/${Object.keys(pinMarkers).length}件)`);
+    };
+
+    // ズームイベントを監視（moveendイベントでも更新）
+    map.on("zoom", updatePinVisibility);
+    map.on("moveend", updatePinVisibility);
+
+    // 初期表示時にも実行
+    updatePinVisibility();
+
     map.addControl(new maplibregl.NavigationControl(), "top-right");
 
     window.__map = map;
+    window.__updatePinVisibility = updatePinVisibility; // グローバルに公開（必要に応じて）
+}
+
+// ピンのマーカーを管理するオブジェクト
+const pinMarkers = {};
+
+// APIからピンデータを取得して地図上に表示
+async function loadPins(map) {
+    if (!map) {
+        console.error("地図オブジェクトが存在しません");
+        return;
+    }
+
+    // 地図が完全に読み込まれているか確認
+    if (!map.loaded()) {
+        console.log("地図がまだ読み込まれていません。読み込み完了を待ちます...");
+        map.once("load", () => {
+            console.log("地図の読み込みが完了したので、ピンを読み込みます");
+            // 地図の描画が完全に終わるまで少し待つ
+            setTimeout(() => {
+                loadPins(map);
+            }, 100);
+        });
+        return;
+    }
+
+    // 地図が読み込まれていることを確認
+    console.log("地図の読み込み状態:", map.loaded());
+
+    try {
+        console.log("ピンデータを取得中...");
+        const response = await fetch("/api/pins");
+
+        if (!response.ok) {
+            console.error("APIリクエストが失敗しました:", response.status, response.statusText);
+            return;
+        }
+
+        const result = await response.json();
+        console.log("APIレスポンス:", result);
+
+        if (result.status === "success" && result.data && Array.isArray(result.data)) {
+            console.log(`取得したピン数: ${result.data.length}件`);
+
+            // 既存のマーカーを削除（MapLibreの標準メソッドを使用）
+            const markerCount = Object.keys(pinMarkers).length;
+            if (markerCount > 0) {
+                console.log(`既存のマーカー${markerCount}件を削除します`);
+                Object.values(pinMarkers).forEach(marker => {
+                    if (marker && typeof marker.remove === "function") {
+                        marker.remove();
+                    }
+                });
+                // マーカーオブジェクトをクリア
+                Object.keys(pinMarkers).forEach(key => delete pinMarkers[key]);
+            }
+
+            // 新しいピンを表示（地図が完全に読み込まれた後に追加）
+            let successCount = 0;
+            result.data.forEach((pin, index) => {
+                console.log(`ピン${index + 1}を追加中:`, pin);
+                try {
+                    addPinToMap(map, pin);
+                    successCount++;
+                } catch (error) {
+                    console.error(`ピン${index + 1}の追加に失敗:`, error, pin);
+                }
+            });
+            console.log(`ピンを${successCount}/${result.data.length}件表示しました`);
+
+            // ピン追加後、現在のズームレベルに応じて表示/非表示を更新
+            if (window.__updatePinVisibility) {
+                window.__updatePinVisibility();
+            }
+        } else {
+            console.warn("ピンデータが取得できませんでした:", result);
+            if (!result.data) {
+                console.warn("result.dataが存在しません");
+            }
+            if (!Array.isArray(result.data)) {
+                console.warn("result.dataが配列ではありません:", typeof result.data);
+            }
+        }
+    } catch (error) {
+        console.error("ピンの読み込みに失敗しました:", error);
+        console.error("エラーの詳細:", error.stack);
+    }
+}
+
+// 地図上にピンを追加
+function addPinToMap(map, pin) {
+    try {
+        console.log("addPinToMap呼び出し:", pin);
+
+        // 地図オブジェクトの確認
+        if (!map) {
+            console.error("地図オブジェクトが存在しません");
+            return;
+        }
+
+        // 座標を確認（必須）
+        if (typeof pin.lng === "undefined" || typeof pin.lat === "undefined") {
+            console.error("ピンの座標が不正です:", pin);
+            return;
+        }
+
+        console.log(`座標確認: lng=${pin.lng}, lat=${pin.lat}`);
+
+        // アイコンの種類に応じてマーカーのスタイルを決定
+        // 重要: サイズを固定（width, height）し、位置調整用のCSS（margin, top, left, transform）は一切使用しない
+        let iconHtml = "";
+        const iconSize = 40; // アイコンのサイズを固定（40px × 40px）
+
+        if (pin.icon_type === "whale") {
+            // クジラアイコン（6000円以上）
+            // transition-noneクラスとインラインスタイルでアニメーションを無効化
+            iconHtml = `<div class="transition-none" style="width: ${iconSize}px; height: ${iconSize}px; font-size: 30px; line-height: ${iconSize}px; text-align: center; transition: none !important;">🐋</div>`;
+        } else if (pin.icon_type === "tuna") {
+            // マグロアイコン（3000〜5999円）
+            // transition-noneクラスとインラインスタイルでアニメーションを無効化
+            iconHtml = `<div class="transition-none" style="width: ${iconSize}px; height: ${iconSize}px; font-size: 30px; line-height: ${iconSize}px; text-align: center; transition: none !important;">🐟</div>`;
+        } else {
+            // 通常のピン（3000円未満）
+            // transition-noneクラスとインラインスタイルでアニメーションを無効化
+            iconHtml = `<div class="transition-none" style="width: ${iconSize}px; height: ${iconSize}px; background-color: #3B82F6; border-radius: 50%; border: 2px solid white; box-shadow: 0 2px 4px rgba(0,0,0,0.3); transition: none !important;"></div>`;
+        }
+
+        // マーカー用のHTML要素を作成
+        // 【重要】位置調整用のCSS（margin, top, left, transform）は一切使用しない
+        // anchor: 'bottom'で位置を制御し、サイズは固定（width, height）のみ
+        const el = document.createElement("div");
+        // 【超重要】transition-noneクラスを追加してアニメーションを完全に無効化
+        // Tailwindのアニメーションクラス（transition, transition-all, duration-*, ease-*, animate-*）は一切使用しない
+        el.className = "pin-marker transition-none";
+        // カーソルのみ設定（位置関連のスタイルは一切設定しない）
+        el.style.cursor = "pointer";
+        // インラインスタイルでも確実に無効化
+        el.style.transition = "none";
+        el.style.setProperty("transition", "none", "important");
+
+        // 見た目のみ - サイズ固定、位置調整用のCSSは一切使用しない
+        // 金額ラベルとアイコンを縦に並べるだけ（margin, padding, position, transformは使わない）
+        // 子要素にもtransition-noneクラスとインラインスタイルでアニメーションを無効化
+        // 重要: Tailwindのクラス（w-full, h-autoなど）は一切使用しない
+        el.innerHTML = `
+            <div class="transition-none" style="background-color: rgba(0,0,0,0.7); color: white; padding: 2px 6px; border-radius: 4px; font-size: 11px; font-weight: bold; white-space: nowrap; pointer-events: none; transition: none !important; max-width: none !important;">
+                ¥${pin.price.toLocaleString()}
+            </div>
+            ${iconHtml}
+        `;
+
+        // 子要素すべてにtransition-noneとmax-width: noneを強制的に適用
+        setTimeout(() => {
+            const allChildren = el.querySelectorAll("*");
+            allChildren.forEach(child => {
+                // クラスを追加
+                if (!child.classList.contains("transition-none")) {
+                    child.classList.add("transition-none");
+                }
+                // インラインスタイルでも確実に無効化
+                child.style.setProperty("transition", "none", "important");
+                child.style.setProperty("max-width", "none", "important");
+                // サイズを固定（Tailwindのリセットを上書き）
+                if (child.style.width && child.style.width.includes("px")) {
+                    child.style.setProperty("width", child.style.width, "important");
+                }
+                if (child.style.height && child.style.height.includes("px")) {
+                    child.style.setProperty("height", child.style.height, "important");
+                }
+            });
+        }, 0);
+
+        // MapLibreの標準Marker機能を使用
+        // 経度（longitude）と緯度（latitude）を明示的に数値型に変換
+        // 注意: MapLibreは [経度(longitude), 緯度(latitude)] の順序を要求します
+        // 重要: 文字列の可能性があるため、確実に数値型に変換
+        const longitude = Number(pin.lng);  // 経度（-180 ～ 180）
+        const latitude = Number(pin.lat);   // 緯度（-90 ～ 90）
+
+        // 座標の型と値を確認
+        console.log(`座標の型確認: lng型=${typeof pin.lng}, lat型=${typeof pin.lat}`);
+        console.log(`座標の値: lng=${pin.lng}, lat=${pin.lat}`);
+        console.log(`変換後: longitude型=${typeof longitude}, latitude型=${typeof latitude}`);
+        console.log(`変換後の値: longitude=${longitude}, latitude=${latitude}`);
+
+        // 座標の妥当性をチェック
+        if (isNaN(longitude) || isNaN(latitude)) {
+            console.error("無効な座標です（NaN）:", { longitude, latitude, pin });
+            return;
+        }
+
+        // 座標の範囲をチェック（経度は-180～180、緯度は-90～90）
+        if (longitude < -180 || longitude > 180) {
+            console.error("経度が範囲外です:", longitude);
+            return;
+        }
+        if (latitude < -90 || latitude > 90) {
+            console.error("緯度が範囲外です:", latitude);
+            return;
+        }
+
+        // 地図が完全に読み込まれているか確認
+        if (!map.loaded()) {
+            console.warn("地図がまだ読み込まれていません。読み込み完了を待ちます...");
+            map.once("load", () => {
+                addPinToMap(map, pin);
+            });
+            return;
+        }
+
+        // マーカーを作成（座標を直接指定）
+        console.log(`マーカーを作成中: 経度=${longitude} (型: ${typeof longitude}), 緯度=${latitude} (型: ${typeof latitude})`);
+
+        // マーカーを作成
+        // 【超重要】anchor: 'bottom'を必ず指定 - これにより画像の下端中央が座標に固定される
+        const marker = new maplibregl.Marker({
+            element: el,
+            anchor: "bottom" // ピンの下端中央が座標位置に来るように設定（必須）
+        });
+
+        console.log("マーカーのanchor設定: bottom（下端中央）");
+
+        // 座標を設定（MapLibreは [経度, 緯度] の順序を要求）
+        // 重要: [longitude, latitude] = [経度, 緯度] の順序、必ず数値型で渡す
+        const coordinates = [longitude, latitude];
+        console.log("座標配列（数値型確認）:", coordinates, "型:", typeof coordinates[0], typeof coordinates[1]);
+        marker.setLngLat(coordinates);
+        console.log("座標を設定しました: [経度, 緯度] =", coordinates);
+
+        // 地図に追加（座標を設定してから追加）
+        // 重要: addTo()は地図のコンテナにマーカーを追加し、地図の座標系にバインドする
+        marker.addTo(map);
+        console.log("地図に追加しました");
+
+        // マーカーが正しく地図に追加されたか確認
+        const actualLngLat = marker.getLngLat();
+        console.log("マーカーの実際の座標:", actualLngLat);
+        console.log("設定した座標との一致:",
+            Math.abs(actualLngLat.lng - longitude) < 0.0001 &&
+            Math.abs(actualLngLat.lat - latitude) < 0.0001
+        );
+
+        // マーカー要素がDOMに追加されているか確認
+        setTimeout(() => {
+            const markerElement = el.parentElement;
+            if (markerElement) {
+                const computedStyle = window.getComputedStyle(markerElement);
+                const elStyle = window.getComputedStyle(el);
+                console.log("マーカー要素の親要素:", markerElement);
+                console.log("マーカー要素の親要素のスタイル:", {
+                    position: computedStyle.position,
+                    display: computedStyle.display,
+                    visibility: computedStyle.visibility,
+                    opacity: computedStyle.opacity,
+                    transform: computedStyle.transform,
+                    left: computedStyle.left,
+                    top: computedStyle.top
+                });
+                console.log("マーカー要素のスタイル:", {
+                    display: elStyle.display,
+                    visibility: elStyle.visibility,
+                    opacity: elStyle.opacity,
+                    width: elStyle.width,
+                    height: elStyle.height
+                });
+            } else {
+                console.warn("マーカー要素の親要素が見つかりません");
+            }
+        }, 100);
+
+        // クリックイベントを追加
+        el.addEventListener("click", (e) => {
+            e.stopPropagation();
+            showPinDetails(pin);
+        });
+
+        // マーカーを保存
+        pinMarkers[pin.id] = marker;
+
+        // 現在のズームレベルに応じて表示/非表示を設定
+        // 注意: マーカーが地図に追加された後、MapLibreが親要素を作成するため、
+        // ここでは設定せず、updatePinVisibility関数で一括管理する
+        console.log(`✅ ピンを追加しました: ID=${pin.id}, 座標=[${longitude}, ${latitude}]`);
+    } catch (error) {
+        console.error("❌ ピンの追加に失敗しました:", pin, error);
+        console.error("エラーの詳細:", error.stack);
+    }
+}
+
+// ピンの詳細を表示
+function showPinDetails(pin) {
+    const modal = document.getElementById("pin-modal");
+    if (!modal) return;
+
+    // モーダルにデータを設定
+    document.getElementById("modal-price").value = `¥${pin.price.toLocaleString()}`;
+    document.getElementById("modal-distance").value = `${pin.distance_km}km`;
+    document.getElementById("modal-time-slot").value = pin.time_slot;
+    document.getElementById("modal-weather").value = pin.weather;
+
+    // 削除トークンを保存（削除時に使用）
+    // 注意: ピン作成時に返されたdelete_tokenをlocalStorageに保存する必要があります
+    modal.dataset.pinId = pin.id;
+
+    // localStorageから削除トークンを取得
+    const storedToken = localStorage.getItem(`pin_delete_token_${pin.id}`);
+    modal.dataset.deleteToken = storedToken || "";
+
+    // 削除トークンがない場合は削除ボタンを無効化
+    const deleteBtn = document.getElementById("modal-delete-btn");
+    if (deleteBtn) {
+        if (storedToken) {
+            deleteBtn.disabled = false;
+            deleteBtn.textContent = "削除";
+        } else {
+            deleteBtn.disabled = true;
+            deleteBtn.textContent = "削除不可（トークンなし）";
+        }
+    }
+
+    modal.classList.remove("hidden");
 }
 
 // モーダルを開く関数
@@ -113,26 +515,129 @@ function initModal() {
 
     if (pinRegistrationBtn) {
         pinRegistrationBtn.addEventListener("click", () => {
-            openModal("pin-registration-modal");
+            // 登録モードに切り替え（中央固定ピン方式）
+            enableRegistrationMode();
+        });
+    }
+
+    // キャンセルボタンのイベントリスナー
+    const cancelRegistrationBtn = document.getElementById("cancel-registration-btn");
+    if (cancelRegistrationBtn) {
+        cancelRegistrationBtn.addEventListener("click", () => {
+            cancelRegistrationMode();
         });
     }
 
     // ピン登録フォームの送信処理
     const pinRegistrationForm = document.getElementById("pin-registration-form");
     if (pinRegistrationForm) {
-        pinRegistrationForm.addEventListener("submit", (e) => {
+        pinRegistrationForm.addEventListener("submit", async (e) => {
             e.preventDefault();
+
+            const map = window.__map;
+            if (!map) {
+                alert("地図が読み込まれていません");
+                return;
+            }
+
+            // 選択された位置を取得
+            const selectedLocation = map._selectedLocation;
+            if (!selectedLocation) {
+                alert("位置が選択されていません。モーダルを閉じて、もう一度地図上をクリックしてください。");
+                return;
+            }
+
+            // 座標を確認（MapLibreのgetCenter()から取得した値）
+            console.log("選択された位置:", selectedLocation);
+            console.log("経度(longitude):", selectedLocation.lng, "型:", typeof selectedLocation.lng);
+            console.log("緯度(latitude):", selectedLocation.lat, "型:", typeof selectedLocation.lat);
+
+            // 座標を確実に数値型に変換
+            const lng = Number(selectedLocation.lng);  // 経度
+            const lat = Number(selectedLocation.lat);   // 緯度
+
+            console.log("変換後の座標: 経度=", lng, "型:", typeof lng, "緯度=", lat, "型:", typeof lat);
+
+            // 座標の妥当性をチェック
+            if (isNaN(lng) || isNaN(lat)) {
+                alert("座標が無効です。もう一度位置を選択してください。");
+                return;
+            }
+
+            // 座標の範囲をチェック
+            if (lng < -180 || lng > 180 || lat < -90 || lat > 90) {
+                alert("座標が範囲外です。もう一度位置を選択してください。");
+                return;
+            }
+
+            // 金額を取得してバリデーション
+            const price = parseInt(document.getElementById("reg-price").value);
+
+            // 金額のバリデーション（3000円以上である必要がある）
+            if (isNaN(price) || price < 3000) {
+                alert("金額は3000円以上である必要があります。");
+                document.getElementById("reg-price").focus();
+                return;
+            }
+
             const formData = {
-                price: document.getElementById("reg-price").value,
-                distance: document.getElementById("reg-distance").value,
-                timeSlot: document.getElementById("reg-time-slot").value,
-                weather: document.getElementById("reg-weather").value,
+                pin: {
+                    price: price,
+                    distance_km: parseFloat(document.getElementById("reg-distance").value),
+                    time_slot: document.getElementById("reg-time-slot").value,
+                    weather: document.getElementById("reg-weather").value,
+                    lat: lat,  // 緯度（latitude）- 数値型
+                    lng: lng   // 経度（longitude）- 数値型
+                }
             };
-            console.log("ピン登録データ:", formData);
-            // 後でAPIに送信する処理を実装
-            closeModal("pin-registration-modal");
-            // フォームをリセット
-            pinRegistrationForm.reset();
+
+            console.log("送信する座標データ:", formData.pin);
+            console.log("送信する座標の型確認: lat型=", typeof formData.pin.lat, "lng型=", typeof formData.pin.lng);
+
+            try {
+                const response = await fetch("/api/pins", {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                    },
+                    body: JSON.stringify(formData)
+                });
+
+                const result = await response.json();
+                console.log("ピン登録レスポンス:", result);
+
+                if (result.status === "success") {
+                    console.log("ピン登録成功:", result.data);
+
+                    // 削除トークンをlocalStorageに保存
+                    if (result.data && result.data.delete_token) {
+                        localStorage.setItem(`pin_delete_token_${result.data.pin.id}`, result.data.delete_token);
+                        console.log("削除トークンを保存しました");
+                    }
+
+                    // モーダルを閉じる
+                    closeModal("pin-registration-modal");
+
+                    // フォームをリセット
+                    pinRegistrationForm.reset();
+
+                    // 選択位置をクリア
+                    delete map._selectedLocation;
+
+                    // ピンを再読み込み
+                    console.log("ピンを再読み込みします...");
+                    await loadPins(map);
+                    console.log("ピンの再読み込みが完了しました");
+
+                    alert("ピンを登録しました");
+                } else {
+                    console.error("ピン登録エラー:", result);
+                    alert(`エラー: ${result.errors ? result.errors.join(", ") : result.error}`);
+                }
+            } catch (error) {
+                console.error("ピン登録に失敗しました:", error);
+                alert("ピンの登録に失敗しました");
+            }
         });
     }
 
@@ -149,12 +654,58 @@ function initModal() {
         }
     });
 
-    // 削除ボタン（後で実装）
+    // 削除ボタン
     if (modalDeleteBtn) {
-        modalDeleteBtn.addEventListener("click", () => {
-            console.log("削除ボタンがクリックされました");
-            // 削除処理を実装（後で）
-            closeModal("pin-modal");
+        modalDeleteBtn.addEventListener("click", async () => {
+            const modal = document.getElementById("pin-modal");
+            if (!modal) return;
+
+            const pinId = modal.dataset.pinId;
+            const deleteToken = modal.dataset.deleteToken;
+
+            if (!pinId) {
+                alert("ピンIDが見つかりません");
+                return;
+            }
+
+            if (!deleteToken) {
+                alert("削除トークンが見つかりません。このピンは削除できません。");
+                return;
+            }
+
+            if (!confirm("このピンを削除しますか？")) {
+                return;
+            }
+
+            try {
+                const response = await fetch(`/api/pins/${pinId}`, {
+                    method: "DELETE",
+                    headers: {
+                        "Content-Type": "application/json",
+                    },
+                    body: JSON.stringify({
+                        delete_token: deleteToken
+                    })
+                });
+
+                const result = await response.json();
+
+                if (result.status === "success") {
+                    // ピンを再読み込み
+                    const map = window.__map;
+                    if (map) {
+                        await loadPins(map);
+                    }
+
+                    closeModal("pin-modal");
+                    alert("ピンを削除しました");
+                } else {
+                    alert(`エラー: ${result.error || "削除に失敗しました"}`);
+                }
+            } catch (error) {
+                console.error("ピン削除に失敗しました:", error);
+                alert("ピンの削除に失敗しました");
+            }
         });
     }
 }
@@ -185,16 +736,238 @@ function hidePinModal() {
     }
 }
 
+// 登録モードを有効化（中央固定ピン方式）
+function enableRegistrationMode() {
+    const map = window.__map;
+    if (!map) return;
+
+    // ボタンの見た目を変更
+    const pinRegistrationBtn = document.getElementById("pin-registration-btn");
+    if (pinRegistrationBtn) {
+        pinRegistrationBtn.textContent = "登録モード（地図をドラッグ）";
+        pinRegistrationBtn.style.backgroundColor = "#10B981";
+        pinRegistrationBtn.style.color = "white";
+        pinRegistrationBtn.disabled = true;
+    }
+
+    // キャンセルボタンを表示
+    const cancelBtn = document.getElementById("cancel-registration-btn");
+    if (cancelBtn) {
+        cancelBtn.classList.remove("hidden");
+    }
+
+    // 地図の中央に固定ピンを表示
+    const center = map.getCenter();
+    const el = document.createElement("div");
+    el.innerHTML = `
+        <div style="position: relative;">
+            <div style="width: 32px; height: 32px; background-color: #EF4444; border-radius: 50%; border: 4px solid white; box-shadow: 0 2px 8px rgba(0,0,0,0.4); animation: pulse 2s infinite;"></div>
+            <div style="position: absolute; top: -8px; left: 50%; transform: translateX(-50%); width: 0; height: 0; border-left: 6px solid transparent; border-right: 6px solid transparent; border-top: 12px solid #EF4444;"></div>
+        </div>
+        <style>
+        @keyframes pulse {
+          0%, 100% { transform: scale(1); opacity: 1; }
+          50% { transform: scale(1.1); opacity: 0.8; }
+        }
+        </style>
+    `;
+
+    // 固定ピンを地図の中央に配置（画面中央に固定）
+    const fixedPinContainer = document.createElement("div");
+    fixedPinContainer.id = "fixed-pin-container";
+    fixedPinContainer.style.cssText = `
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -100%);
+        z-index: 1000;
+        pointer-events: none;
+    `;
+    fixedPinContainer.appendChild(el);
+    map.getContainer().appendChild(fixedPinContainer);
+
+    map._fixedPinContainer = fixedPinContainer;
+    map._registrationMode = true;
+
+    // 地図の移動時に位置を更新
+    const updateLocation = () => {
+        const center = map.getCenter();
+        // MapLibreのgetCenter()はLngLatオブジェクトを返し、lngとlatプロパティを持つ
+        // 注意: center.lng = 経度（longitude）、center.lat = 緯度（latitude）
+        // 重要: 座標を確実に数値型で保存
+        const lng = Number(center.lng);  // 経度
+        const lat = Number(center.lat);  // 緯度
+
+        map._selectedLocation = {
+            lng: lng,  // 経度（longitude）
+            lat: lat   // 緯度（latitude）
+        };
+        console.log("位置を更新しました:", map._selectedLocation);
+        console.log("座標の型確認: lng型=", typeof lng, "lat型=", typeof lat);
+        console.log("座標の値: 経度=", lng, "緯度=", lat);
+    };
+
+    map.on("move", updateLocation);
+    map.on("moveend", updateLocation);
+    map._registrationMoveHandler = updateLocation;
+
+    // 初期位置を設定
+    updateLocation();
+
+    // 「位置を確定」ボタンを表示
+    showConfirmButton();
+}
+
+// 「位置を確定」ボタンを表示
+function showConfirmButton() {
+    // 既存のボタンを削除
+    const existingBtn = document.getElementById("confirm-location-btn");
+    if (existingBtn) {
+        existingBtn.remove();
+    }
+
+    const map = window.__map;
+    if (!map) return;
+
+    const btn = document.createElement("button");
+    btn.id = "confirm-location-btn";
+    btn.textContent = "位置を確定";
+    btn.style.cssText = `
+        position: absolute;
+        bottom: 80px;
+        left: 50%;
+        transform: translateX(-50%);
+        z-index: 1001;
+        background-color: #3B82F6;
+        color: white;
+        padding: 12px 24px;
+        border: none;
+        border-radius: 8px;
+        font-size: 16px;
+        font-weight: bold;
+        cursor: pointer;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+    `;
+    btn.addEventListener("click", () => {
+        // 登録モードを無効化
+        disableRegistrationMode();
+
+        // 入力モーダルを開く
+        openModal("pin-registration-modal");
+
+        // フォームをリセット
+        const form = document.getElementById("pin-registration-form");
+        if (form) {
+            form.reset();
+        }
+    });
+
+    map.getContainer().appendChild(btn);
+    map._confirmButton = btn;
+}
+
+// 登録モードを無効化
+function disableRegistrationMode() {
+    const map = window.__map;
+    if (!map) return;
+
+    // 固定ピンを削除
+    if (map._fixedPinContainer) {
+        map._fixedPinContainer.remove();
+        delete map._fixedPinContainer;
+    }
+
+    // 確定ボタンを削除
+    if (map._confirmButton) {
+        map._confirmButton.remove();
+        delete map._confirmButton;
+    }
+
+    // イベントハンドラーを削除
+    if (map._registrationMoveHandler) {
+        map.off("move", map._registrationMoveHandler);
+        map.off("moveend", map._registrationMoveHandler);
+        delete map._registrationMoveHandler;
+    }
+
+    map._registrationMode = false;
+
+    // ボタンを元に戻す
+    const pinRegistrationBtn = document.getElementById("pin-registration-btn");
+    if (pinRegistrationBtn) {
+        pinRegistrationBtn.textContent = "ピン登録";
+        pinRegistrationBtn.style.backgroundColor = "";
+        pinRegistrationBtn.style.color = "";
+        pinRegistrationBtn.disabled = false;
+    }
+
+    // キャンセルボタンを非表示
+    const cancelBtn = document.getElementById("cancel-registration-btn");
+    if (cancelBtn) {
+        cancelBtn.classList.add("hidden");
+    }
+}
+
+// 登録モードをキャンセル
+function cancelRegistrationMode() {
+    const map = window.__map;
+
+    // 登録モードを無効化
+    if (map) {
+        disableRegistrationMode();
+
+        // 選択位置をクリア
+        delete map._selectedLocation;
+    }
+}
+
+// モーダルが閉じられたときに登録モードをキャンセル
+const originalCloseModal = closeModal;
+closeModal = function (modalId) {
+    originalCloseModal(modalId);
+    if (modalId === "pin-registration-modal") {
+        // 登録モードをキャンセル（仮ピンも削除）
+        cancelRegistrationMode();
+    }
+};
+
 // グローバルに公開
 window.showPinModal = showPinModal;
 window.hidePinModal = hidePinModal;
+window.loadPins = loadPins;
 
-document.addEventListener("DOMContentLoaded", () => {
+// 地図とモーダルの初期化
+function initializeApp() {
+    console.log("アプリを初期化します");
     initMap();
     initModal();
+
+    // 念のため、少し待ってからピンを再読み込み（地図が完全に初期化されるまで）
+    setTimeout(() => {
+        const map = window.__map;
+        if (map) {
+            if (map.loaded()) {
+                console.log("初期化後のピン再読み込みを実行します（地図は既に読み込まれています）");
+                loadPins(map);
+            } else {
+                console.log("地図の読み込みを待ってからピンを読み込みます");
+                map.once("load", () => {
+                    console.log("地図の読み込みが完了したので、ピンを読み込みます");
+                    setTimeout(() => {
+                        loadPins(map);
+                    }, 100);
+                });
+            }
+        }
+    }, 500);
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+    console.log("DOMContentLoadedイベントが発火しました");
+    initializeApp();
 });
 
 document.addEventListener("turbo:load", () => {
-    initMap();
-    initModal();
+    console.log("turbo:loadイベントが発火しました");
+    initializeApp();
 });

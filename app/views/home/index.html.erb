@@ -1,6 +1,8 @@
 <!-- ヘッダー -->
 <header class="bg-blue-600 text-white px-4 py-3 flex justify-between items-center z-50">
-  <div class="text-lg font-semibold">ロゴ</div>
+  <div class="flex items-center">
+    <%= image_tag "magurologo.png", alt: "マグロマップ", class: "h-8 w-auto" %>
+  </div>
   <nav class="flex gap-4">
     <button id="about-app-btn" class="hover:underline bg-transparent border-none text-white cursor-pointer">このアプリについて</button>
     <button id="how-to-use-btn" class="hover:underline bg-transparent border-none text-white cursor-pointer">使い方</button>
@@ -12,10 +14,15 @@
 <div class="flex-1 relative overflow-hidden">
   <div id="map" class="absolute inset-0"></div>
   
-  <!-- ピン登録ボタン（右下） -->
-  <button id="pin-registration-btn" class="absolute bottom-4 right-4 bg-white border border-gray-300 px-6 py-3 rounded shadow-lg hover:bg-gray-50 transition-colors z-40">
-    ピン登録
-  </button>
+  <!-- ピン登録ボタンとキャンセルボタン（右下） -->
+  <div class="absolute bottom-4 right-4 flex gap-2 z-40">
+    <button id="pin-registration-btn" class="bg-white border border-gray-300 px-6 py-3 rounded shadow-lg hover:bg-gray-50 transition-colors">
+      ピン登録
+    </button>
+    <button id="cancel-registration-btn" class="hidden bg-red-500 text-white px-6 py-3 rounded shadow-lg hover:bg-red-600 transition-colors">
+      キャンセル
+    </button>
+  </div>
 </div>
 
 <!-- モーダル：このアプリについて -->
@@ -107,7 +114,8 @@
     <form id="pin-registration-form" class="space-y-4">
       <div>
         <label class="block text-sm font-medium mb-1">金額（円）</label>
-        <input type="number" id="reg-price" class="w-full border border-gray-300 rounded px-3 py-2" required min="0">
+        <input type="number" id="reg-price" class="w-full border border-gray-300 rounded px-3 py-2" required min="3000" step="1">
+        <p class="text-xs text-gray-500 mt-1">※3000円以上の金額を入力してください</p>
       </div>
       
       <div>
@@ -120,9 +128,9 @@
         <select id="reg-time-slot" class="w-full border border-gray-300 rounded px-3 py-2" required>
           <option value="">選択してください</option>
           <option value="朝">朝（6:00-10:00）</option>
-          <option value="昼">昼（10:00-14:00）</option>
-          <option value="夕方">夕方（14:00-18:00）</option>
-          <option value="夜">夜（18:00-22:00）</option>
+          <option value="昼">昼（10:00-16:00）</option>
+          <option value="夕方">夕方（16:00-19:00）</option>
+          <option value="夜">夜（19:00-22:00）</option>
           <option value="深夜">深夜（22:00-6:00）</option>
         </select>
       </div>
@@ -143,7 +151,7 @@
           キャンセル
         </button>
         <button type="submit" class="bg-blue-600 text-white px-6 py-2 rounded hover:bg-blue-700 transition-colors">
-          登録
+          保存
         </button>
       </div>
     </form>
@@ -181,7 +189,7 @@
     </div>
     
     <div class="flex justify-end">
-      <button id="modal-delete-btn" class="bg-gray-200 border border-gray-300 text-gray-700 px-6 py-2 rounded hover:bg-gray-300 transition-colors">
+      <button id="modal-delete-btn" class="bg-red-500 text-white px-6 py-2 rounded hover:bg-red-600 transition-colors">
         削除
       </button>
     </div>

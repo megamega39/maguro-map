@@ -14,3 +14,39 @@
     @apply absolute inset-0;
   }
 }
+
+/* MapLibre専用のスタイル上書き - TailwindのPreflight（リセットCSS）の干渉を防ぐ */
+.maplibregl-map img {
+  max-width: none !important;
+  height: auto !important;
+  width: auto !important;
+}
+
+/* マーカーコンテナ自体の干渉を防ぐ */
+.maplibregl-marker {
+  position: absolute !important;
+  top: 0 !important;
+  left: 0 !important;
+  will-change: transform !important;
+}
+
+/* カスタムマーカーの画像サイズを明示的に指定 */
+.pin-marker,
+.pin-marker img,
+.pin-marker div {
+  max-width: none !important;
+}
+
+/* ピンマーカーの要素サイズを固定 */
+.pin-marker {
+  width: auto !important;
+  height: auto !important;
+}
+
+/* ピンマーカーの子要素（アイコン）のサイズを固定 */
+.pin-marker>div:last-child {
+  width: 40px !important;
+  height: 40px !important;
+  max-width: 40px !important;
+  max-height: 40px !important;
+}
