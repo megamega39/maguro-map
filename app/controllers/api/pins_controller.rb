@@ -7,78 +7,18 @@ class Api::PinsController < ApplicationController
   rescue_from ActionController::ParameterMissing, with: :parameter_missing
   rescue_from StandardError, with: :handle_standard_error
 
+  # 定数定義
+  MAX_PINS_PER_REQUEST = 1000
+
   # ピンの一覧取得
   def index
-    begin
-      # sharedパラメータがある場合：共有マップモード
-      if params[:shared].present?
-        # トークン検証（全ユーザーをチェック）
-        shared_user = User.where.not(share_map_token_digest: nil).find { |u| u.share_map_token_valid?(params[:shared]) }
-        
-        unless shared_user
-          render json: {
-            status: "error",
-            error: "無効な共有トークンです"
-          }, status: :unauthorized
-          return
-        end
-        
-        # 自分の共有トークンの場合は通常モードとして扱う
-        is_own_shared_map = user_signed_in? && shared_user.id == current_user.id
-        
-        if is_own_shared_map
-          # 通常モード：publicピン + 自分のprivateピン
-          pins = Pin.where("visibility = ? OR visibility IS NULL", 0)
-          private_pins = Pin.where(visibility: 1, user_id: current_user.id)
-          pins = pins.or(private_pins)
-          pins = pins.order(created_at: :desc).limit(1000)
-        else
-          # 他人の共有トークンの場合：共有ユーザーのピン（public + private両方）を取得
-          pins = Pin.where(user_id: shared_user.id).order(created_at: :desc).limit(1000)
-        end
-        
-        # 共有マップモードかどうかをフラグで返す（自分の共有トークンでない場合のみtrue）
-        is_shared_map = !is_own_shared_map
-        
-        render json: {
-          status: "success",
-          data: pins.map { |pin| pin_json(pin) },
-          is_shared_map: is_shared_map
-        }
-        return
-      else
-        # デフォルト: publicピン + (ログイン中なら自分のprivateピンも含む)
-        # 管理者の場合はすべてのピン（public/private/匿名）を取得
-        if user_signed_in? && current_user.admin?
-          pins = Pin.all.order(created_at: :desc).limit(1000)
-        else
-          # 既存のピン（visibilityがnull）もpublicとして扱う
-          # enumの値は整数値（0 = public, 1 = private）
-          pins = Pin.where("visibility = ? OR visibility IS NULL", 0)
-          
-          # ログイン中なら自分のprivateピンも追加
-          if user_signed_in?
-            private_pins = Pin.where(visibility: 1, user_id: current_user.id)
-            pins = pins.or(private_pins)
-          end
-          
-          pins = pins.order(created_at: :desc).limit(1000) # 最新1000件まで
-        end
-      end
-      
-      render json: {
-        status: "success",
-        data: pins.map { |pin| pin_json(pin) },
-        is_shared_map: false
-      }
-    rescue => e
-      # 予期しないエラーをキャッチしてJSON形式で返す
-      Rails.logger.error "Pin index error: #{e.class} - #{e.message}\n#{e.backtrace.join("\n")}"
-      render json: {
-        status: "error",
-        error: "ピンの取得に失敗しました: #{e.message}"
-      }, status: :internal_server_error
+    if params[:shared].present?
+      handle_shared_map_request
+    else
+      handle_normal_request
     end
+  rescue => e
+    handle_index_error(e)
   end
 
   # ピンの作成
@@ -225,13 +165,118 @@ class Api::PinsController < ApplicationController
 
   private
 
+  # 共有マップモードのリクエストを処理
+  def handle_shared_map_request
+    shared_user = find_shared_user
+    unless shared_user
+      render_unauthorized("無効な共有トークンです")
+      return
+    end
+
+    is_own_shared_map = own_shared_map?(shared_user)
+    pins = fetch_pins_for_shared_map(shared_user, is_own_shared_map)
+    is_shared_map = !is_own_shared_map
+
+    render_success(pins, is_shared_map: is_shared_map)
+  end
+
+  # 通常モードのリクエストを処理
+  def handle_normal_request
+    pins = fetch_pins_for_normal_mode
+    render_success(pins, is_shared_map: false)
+  end
+
+  # 共有マップ用のピンを取得
+  def fetch_pins_for_shared_map(shared_user, is_own_shared_map)
+    if is_own_shared_map
+      public_and_own_private_pins
+    else
+      shared_user_pins(shared_user)
+    end
+  end
+
+  # 通常モード用のピンを取得
+  def fetch_pins_for_normal_mode
+    if admin_user?
+      all_pins
+    else
+      public_and_own_private_pins
+    end
+  end
+
+  # 共有ユーザーを検索
+  def find_shared_user
+    User.where.not(share_map_token_digest: nil).find { |u| u.share_map_token_valid?(params[:shared]) }
+  end
+
+  # 自分の共有トークンかどうかを判定
+  def own_shared_map?(shared_user)
+    user_signed_in? && shared_user.id == current_user.id
+  end
+
+  # すべてのピンを取得（管理者用）
+  def all_pins
+    Pin.all.order(created_at: :desc).limit(MAX_PINS_PER_REQUEST)
+  end
+
+  # 公開ピンと自分のプライベートピンを取得
+  def public_and_own_private_pins
+    pins = Pin.where("visibility = ? OR visibility IS NULL", 0)
+    if user_signed_in?
+      private_pins = Pin.where(visibility: 1, user_id: current_user.id)
+      pins = pins.or(private_pins)
+    end
+    pins.order(created_at: :desc).limit(MAX_PINS_PER_REQUEST)
+  end
+
+  # 共有ユーザーのピンを取得
+  def shared_user_pins(shared_user)
+    Pin.where(user_id: shared_user.id).order(created_at: :desc).limit(MAX_PINS_PER_REQUEST)
+  end
+
+  # 成功レスポンスを返す
+  def render_success(pins, is_shared_map: false)
+    render json: {
+      status: "success",
+      data: pins.map { |pin| pin_json(pin) },
+      is_shared_map: is_shared_map
+    }
+  end
+
+  # 認証エラーレスポンスを返す
+  def render_unauthorized(message)
+    render json: {
+      status: "error",
+      error: message
+    }, status: :unauthorized
+  end
+
+  # indexアクションのエラーを処理
+  def handle_index_error(error)
+    Rails.logger.error "Pin index error: #{error.class} - #{error.message}\n#{error.backtrace.join("\n")}"
+    render json: {
+      status: "error",
+      error: "ピンの取得に失敗しました: #{error.message}"
+    }, status: :internal_server_error
+  end
+
   # ピンの編集権限をチェック
   def can_edit_pin?(pin)
-    # shared map閲覧中は編集不可（管理者でも不可）
+    can_modify_pin?(pin)
+  end
+
+  # ピンの削除権限をチェック
+  def can_delete_pin?(pin)
+    can_modify_pin?(pin)
+  end
+
+  # 共通の認可チェック（編集・削除共通）
+  def can_modify_pin?(pin)
+    # shared map閲覧中は編集・削除不可（管理者でも不可）
     return false if in_shared_map_mode?
 
-    # 管理者はすべてのピンを編集可能
-    return true if user_signed_in? && current_user.admin?
+    # 管理者はすべてのピンを編集・削除可能
+    return true if admin_user?
 
     # 通常ユーザーの権限チェック
     # 1. ログイン後に登録したピン（user_idが存在する）の場合：自分のピンのみ
@@ -246,25 +291,9 @@ class Api::PinsController < ApplicationController
     BCrypt::Password.new(pin.delete_token_digest) == delete_token
   end
 
-  # ピンの削除権限をチェック
-  def can_delete_pin?(pin)
-    # shared map閲覧中は削除不可（管理者でも不可）
-    return false if in_shared_map_mode?
-
-    # 管理者はすべてのピンを削除可能
-    return true if user_signed_in? && current_user.admin?
-
-    # 通常ユーザーの権限チェック
-    # 1. ログイン後に登録したピン（user_idが存在する）の場合：自分のピンのみ
-    if pin.user_id.present?
-      return user_signed_in? && pin.user_id == current_user.id
-    end
-
-    # 2. 未ログイン時に登録したピン（user_idがnull）の場合：delete_tokenで認証
-    delete_token = params[:delete_token]
-    return false unless delete_token && pin.delete_token_digest.present?
-    
-    BCrypt::Password.new(pin.delete_token_digest) == delete_token
+  # 管理者かどうかを判定
+  def admin_user?
+    user_signed_in? && current_user.admin?
   end
 
   # shared map閲覧中かどうかをチェック

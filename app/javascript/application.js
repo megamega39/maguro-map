@@ -21,6 +21,13 @@ const MAP_CONFIG = {
     FLY_TO_DURATION: 1000       // 地図移動アニメーションの時間（ミリ秒）
 };
 
+// タイミング設定
+const TIMING_CONFIG = {
+    HIGHLIGHT_AUTO_CLEAR: 1000,      // ボタンハイライト自動解除時間（ms）
+    RELOAD_DELAY: 2000,              // リロード遅延時間（ms）
+    TOAST_DURATION: 3000             // トースト表示時間（ms）
+};
+
 // 表示する都市
 const CITY = {
     tokyo: { center: [139.767125, 35.681236], zoom: 12 },      // 東京
@@ -489,22 +496,15 @@ function initMyAreaButton(map) {
         const myArea = await loadMyArea();
         if (myArea) {
             // マイエリアが登録されている場合はそこに飛ぶ
-            map.flyTo({
-                center: [myArea.lng, myArea.lat],
-                zoom: myArea.zoom,
-                duration: MAP_CONFIG.FLY_TO_DURATION
+            moveMapToLocation(map, {
+                lng: myArea.lng,
+                lat: myArea.lat,
+                zoom: myArea.zoom
+            }, {
+                clearCityHighlights: true,
+                highlightMyArea: true,
+                autoClearHighlight: true
             });
-
-            // 都市リンクのハイライトをクリア
-            clearCityLinksHighlight();
-
-            // マイエリアボタンをハイライト
-            highlightButton(myAreaBtn);
-
-            // 1秒後に自動解除
-            setTimeout(() => {
-                clearMyAreaButtonHighlight();
-            }, 1000);
         } else {
             // マイエリアが未登録の場合はマイエリア選択モードを有効化
             enableMyAreaSelectionMode();
@@ -532,6 +532,70 @@ function clearMyAreaButtonHighlight() {
 function clearNavigationHighlights() {
     clearCityLinksHighlight();
     clearMyAreaButtonHighlight();
+}
+
+// ハイライトタイマー管理
+const highlightTimers = new Map();
+
+// ボタンをハイライトして自動解除タイマーを設定
+function highlightButtonWithAutoClear(element, duration = TIMING_CONFIG.HIGHLIGHT_AUTO_CLEAR) {
+    if (!element) return;
+
+    // 既存のタイマーをクリア
+    const existingTimer = highlightTimers.get(element);
+    if (existingTimer) {
+        clearTimeout(existingTimer);
+    }
+
+    highlightButton(element);
+
+    // 新しいタイマーを設定
+    const timer = setTimeout(() => {
+        clearButtonHighlight(element);
+        highlightTimers.delete(element);
+    }, duration);
+
+    highlightTimers.set(element, timer);
+}
+
+// 401エラー（セッション切れ）時の処理を統一
+function handle401Error(errorMessage = ERROR_MESSAGES.RELOGIN_REQUIRED) {
+    showToast(errorMessage, "error");
+    setTimeout(() => {
+        window.location.reload();
+    }, TIMING_CONFIG.RELOAD_DELAY);
+}
+
+// 地図を指定位置に移動（共通処理）
+function moveMapToLocation(map, location, options = {}) {
+    const {
+        clearCityHighlights = true,
+        highlightMyArea = false,
+        autoClearHighlight = true
+    } = options;
+
+    if (!map || !location) return;
+
+    map.flyTo({
+        center: [location.lng, location.lat],
+        zoom: location.zoom,
+        duration: MAP_CONFIG.FLY_TO_DURATION
+    });
+
+    if (clearCityHighlights) {
+        clearCityLinksHighlight();
+    }
+
+    if (highlightMyArea) {
+        const myAreaBtn = DOMCache.get("my-area-btn");
+        if (myAreaBtn) {
+            if (autoClearHighlight) {
+                highlightButtonWithAutoClear(myAreaBtn);
+            } else {
+                highlightButton(myAreaBtn);
+            }
+        }
+    }
 }
 
 
@@ -566,25 +630,16 @@ function initCityLinks(map) {
                 const { center, zoom } = CITY[cityKey];
 
                 // 地図の中心を移動（アニメーション付き）
-                map.flyTo({
-                    center: center,
-                    zoom: zoom,
-                    duration: MAP_CONFIG.FLY_TO_DURATION
-                });
+                moveMapToLocation(map, { lng: center[0], lat: center[1], zoom });
 
                 // アクティブなリンクのスタイルを更新
                 cityLinks.forEach(l => {
                     clearButtonHighlight(l);
                 });
-                highlightButton(link);
+                highlightButtonWithAutoClear(link);
 
                 // マイエリアボタンのハイライトをクリア
                 clearMyAreaButtonHighlight();
-
-                // 1秒後に自動解除
-                setTimeout(() => {
-                    clearButtonHighlight(link);
-                }, 1000);
 
                 // ハンバーガーメニュー内の都市リンクをクリックした場合はメニューを閉じる
                 const mobileMenuDrawer = document.getElementById("mobile-menu-drawer");
@@ -1078,10 +1133,7 @@ async function openEditModal(pinId) {
     if (!result.success) {
         // 401エラーの場合は再ログインメッセージを表示してページをリロード
         if (result.requiresRelogin) {
-            showToast(ERROR_MESSAGES.RELOGIN_REQUIRED, "error");
-            setTimeout(() => {
-                window.location.reload();
-            }, 2000);
+            handle401Error();
         } else {
             showToast("ピン情報の取得に失敗しました", "error");
         }
@@ -1739,20 +1791,17 @@ function initOtherButtons() {
             const map = window.__map;
             if (map && myArea) {
                 // マイエリアが設定されている場合は移動
-                map.flyTo({
-                    center: [myArea.lng, myArea.lat],
-                    zoom: myArea.zoom,
-                    duration: MAP_CONFIG.FLY_TO_DURATION
+                moveMapToLocation(map, {
+                    lng: myArea.lng,
+                    lat: myArea.lat,
+                    zoom: myArea.zoom
+                }, {
+                    clearCityHighlights: true,
+                    highlightMyArea: true,
+                    autoClearHighlight: true
                 });
-                clearCityLinksHighlight();
-                const myAreaBtn = DOMCache.get("my-area-btn");
-                if (myAreaBtn) {
-                    highlightButton(myAreaBtn);
-                    // 1秒後に自動解除
-                    setTimeout(() => {
-                        clearMyAreaButtonHighlight();
-                    }, 1000);
-                }
+                // モバイルヘッダーのマイエリアボタンもハイライト
+                highlightButtonWithAutoClear(mobileHeaderMyAreaBtn);
             } else {
                 // マイエリアが未設定の場合はトーストでメッセージを表示
                 showToast(ERROR_MESSAGES.MY_AREA_NOT_SET, "error");
@@ -2254,7 +2303,7 @@ async function openShareMapModal() {
                 // トースト通知を表示した後、少し遅延してからページをリロード
                 setTimeout(() => {
                     window.location.reload();
-                }, 2000);
+                }, TIMING_CONFIG.RELOAD_DELAY);
             } else {
                 showToast(result.error || ERROR_MESSAGES.SHARE_URL_GET_FAILED, "error");
             }
@@ -2802,10 +2851,10 @@ function cancelMyAreaSelectionMode() {
 
     // 選択モード前の地図位置に戻す
     if (map._myAreaSelectionPreviousState) {
-        map.flyTo({
-            center: map._myAreaSelectionPreviousState.center,
-            zoom: map._myAreaSelectionPreviousState.zoom,
-            duration: MAP_CONFIG.FLY_TO_DURATION
+        moveMapToLocation(map, {
+            lng: map._myAreaSelectionPreviousState.center[0],
+            lat: map._myAreaSelectionPreviousState.center[1],
+            zoom: map._myAreaSelectionPreviousState.zoom
         });
     }
 }
@@ -2880,7 +2929,7 @@ async function saveMyAreaSelection() {
                 // トースト通知を表示した後、少し遅延してからページをリロード
                 setTimeout(() => {
                     window.location.reload();
-                }, 2000);
+                }, TIMING_CONFIG.RELOAD_DELAY);
             } else {
                 showToast(result.error || ERROR_MESSAGES.MY_AREA_SAVE_FAILED, "error");
             }
