@@ -43,7 +43,7 @@
       <div class="border-b border-blue-500 pb-3 mb-3">
         <h3 class="text-sm font-semibold text-blue-200 mb-2 px-2">主要都市</h3>
         <div class="grid grid-cols-2 gap-1">
-          <button id="mobile-my-area-btn" class="city-link text-left px-3 py-2 rounded hover:bg-blue-700 transition-colors text-sm font-medium col-span-2">マイエリア</button>
+          <button id="mobile-my-area-btn" class="city-link text-left px-3 py-2 rounded hover:bg-blue-700 transition-colors text-sm font-medium col-span-2">📍 マイエリア</button>
           <button data-city="tokyo" class="city-link text-left px-3 py-2 rounded hover:bg-blue-700 transition-colors text-sm">東京</button>
           <button data-city="kanagawa" class="city-link text-left px-3 py-2 rounded hover:bg-blue-700 transition-colors text-sm">神奈川</button>
           <button data-city="chiba" class="city-link text-left px-3 py-2 rounded hover:bg-blue-700 transition-colors text-sm">千葉</button>
@@ -63,7 +63,7 @@
       <!-- ログイン時のみ表示：共有・自分のピンのみ表示 -->
       <% if user_signed_in? %>
         <div class="border-b border-blue-500 pb-3 mb-3">
-          <button id="mobile-share-map-btn" class="w-full text-left px-4 py-3 rounded hover:bg-blue-700 transition-colors font-medium">共有</button>
+          <button id="mobile-share-map-btn" class="w-full text-left px-4 py-3 rounded hover:bg-blue-700 transition-colors font-medium">🔗 共有マップ</button>
           <div class="flex items-center justify-between px-4 py-3">
             <span class="text-sm">自分のピンのみ表示</span>
             <button id="mobile-my-pins-toggle" class="relative inline-flex h-6 w-11 items-center rounded-full bg-gray-300 transition-colors flex-shrink-0" role="switch" aria-checked="false">
@@ -107,7 +107,7 @@
 <nav class="hidden md:flex flex-none bg-blue-500 text-white px-2 sm:px-4 py-2 z-40">
   <div class="flex gap-4 items-center flex-wrap w-full">
     <div class="flex gap-4 items-center flex-wrap">
-      <button id="my-area-btn" class="hover:underline bg-transparent border-none text-white cursor-pointer px-2 py-1 rounded hover:bg-blue-600 transition-colors font-medium">マイエリア</button>
+      <button id="my-area-btn" class="hover:underline bg-transparent border-none text-white cursor-pointer px-2 py-1 rounded hover:bg-blue-600 transition-colors font-medium">📍 マイエリア</button>
       <span class="text-sm font-medium">主要都市:</span>
       <button data-city="tokyo" class="city-link hover:underline bg-transparent border-none text-white cursor-pointer px-2 py-1 rounded hover:bg-blue-600 transition-colors">東京</button>
       <button data-city="kanagawa" class="city-link hover:underline bg-transparent border-none text-white cursor-pointer px-2 py-1 rounded hover:bg-blue-600 transition-colors">神奈川</button>
@@ -125,7 +125,7 @@
     </div>
     <% if user_signed_in? %>
       <div class="flex items-center gap-2 ml-auto">
-        <button id="share-map-btn" class="hover:underline bg-transparent border-none text-white cursor-pointer px-2 py-1 rounded hover:bg-blue-600 transition-colors font-medium">共有</button>
+        <button id="share-map-btn" class="hover:underline bg-transparent border-none text-white cursor-pointer px-2 py-1 rounded hover:bg-blue-600 transition-colors font-medium">🔗 共有マップ</button>
         <span class="text-sm">自分のピンのみ表示</span>
         <button id="my-pins-toggle" class="relative inline-flex h-6 w-11 items-center rounded-full bg-gray-300 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2" role="switch" aria-checked="false">
           <span class="inline-block h-4 w-4 transform rounded-full bg-white transition-transform translate-x-1"></span>

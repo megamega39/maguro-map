@@ -592,6 +592,9 @@ const pinMarkers = {};
 // 自分のピンのみ表示するトグル状態
 let showMyPinsOnly = false;
 
+// 共有マップモードかどうかの状態
+let isSharedMapMode = false;
+
 // APIからピンデータを取得して地図上に表示
 async function loadPins(map) {
     if (!map) {
@@ -617,15 +620,26 @@ async function loadPins(map) {
         });
 
         // APIレスポンス後、共有モードかどうかを判定
-        // 自分の共有トークンの場合は共有モードとして扱わない
+        // API側で共有モードかどうかのフラグを返しているので、それを使用
         let isSharedMode = false;
         if (sharedToken && result.success) {
-            // 自分の共有トークンかどうかを判定するため、API側で通常モードとして扱われているか確認
-            // ログインしていて、sharedトークンがある場合は、API側で自分のトークンかどうか判定済み
-            // 自分のトークンの場合は通常モードとして扱われているので、共有モードではない
-            // 他人のトークンの場合のみ共有モードとして扱う
-            isSharedMode = !currentUserId; // 未ログインの場合のみ共有モード
+            // API側でis_shared_mapフラグを返している場合はそれを使用
+            // 自分の共有トークンの場合はfalse、他人の共有トークンの場合はtrue
+            // is_shared_mapがundefinedの場合は、sharedTokenがあるので共有モードとして扱う（フォールバック）
+            if (result.is_shared_map !== undefined) {
+                isSharedMode = result.is_shared_map === true;
+            } else {
+                // フォールバック: sharedTokenがある場合は共有モードとして扱う
+                // ただし、自分の共有トークンの場合は通常モードとして扱う必要がある
+                // その判定はAPI側で行っているので、is_shared_mapが返されない場合は
+                // 未ログインの場合のみ共有モードとして扱う（既存のロジック）
+                const currentUserId = getCurrentUserId();
+                isSharedMode = !currentUserId; // 未ログインの場合のみ共有モード
+            }
         }
+
+        // グローバル変数に保存（showPinDetailsなどで使用）
+        isSharedMapMode = isSharedMode;
 
         // 共有モードの場合はバッジを表示し、「自分のピンのみ表示」トグルを無効化
         const sharedMapBadge = DOMCache.get("shared-map-badge");
@@ -866,11 +880,8 @@ function showPinDetails(pin) {
     if (!modal) return;
 
     // 共有モードかどうかを判定
-    // 自分の共有トークンの場合は共有モードとして扱わない
-    const urlParams = new URLSearchParams(window.location.search);
-    const sharedToken = urlParams.get('shared');
-    const currentUserId = getCurrentUserId();
-    const isSharedMode = sharedToken !== null && !currentUserId; // 未ログインの場合のみ共有モード
+    // loadPinsで取得したグローバル変数を使用
+    const isSharedMode = isSharedMapMode;
 
     // モーダルにデータを設定
     const modalPrice = DOMCache.get("modal-price");
@@ -1260,7 +1271,15 @@ async function apiRequest(url, options = {}) {
         if (response.ok) {
             // 成功レスポンスの形式を統一
             const data = result.data !== undefined ? result.data : result;
-            return { success: true, data, response };
+            // 元のレスポンスの他のプロパティも保持（is_shared_mapなど）
+            const responseObj = { success: true, data, response };
+            // resultの他のプロパティをコピー（dataとstatus以外）
+            Object.keys(result).forEach(key => {
+                if (key !== 'data' && key !== 'status') {
+                    responseObj[key] = result[key];
+                }
+            });
+            return responseObj;
         } else {
             // エラーレスポンス
             const errorMessage = result.errors
