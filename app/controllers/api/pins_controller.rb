@@ -24,7 +24,9 @@ class Api::PinsController < ApplicationController
         end
         
         # 自分の共有トークンの場合は通常モードとして扱う
-        if user_signed_in? && shared_user.id == current_user.id
+        is_own_shared_map = user_signed_in? && shared_user.id == current_user.id
+        
+        if is_own_shared_map
           # 通常モード：publicピン + 自分のprivateピン
           pins = Pin.where("visibility = ? OR visibility IS NULL", 0)
           private_pins = Pin.where(visibility: 1, user_id: current_user.id)
@@ -34,6 +36,16 @@ class Api::PinsController < ApplicationController
           # 他人の共有トークンの場合：共有ユーザーのピン（public + private両方）を取得
           pins = Pin.where(user_id: shared_user.id).order(created_at: :desc).limit(1000)
         end
+        
+        # 共有マップモードかどうかをフラグで返す（自分の共有トークンでない場合のみtrue）
+        is_shared_map = !is_own_shared_map
+        
+        render json: {
+          status: "success",
+          data: pins.map { |pin| pin_json(pin) },
+          is_shared_map: is_shared_map
+        }
+        return
       else
         # デフォルト: publicピン + (ログイン中なら自分のprivateピンも含む)
         # 管理者の場合はすべてのピン（public/private/匿名）を取得
@@ -56,7 +68,8 @@ class Api::PinsController < ApplicationController
       
       render json: {
         status: "success",
-        data: pins.map { |pin| pin_json(pin) }
+        data: pins.map { |pin| pin_json(pin) },
+        is_shared_map: false
       }
     rescue => e
       # 予期しないエラーをキャッチしてJSON形式で返す
