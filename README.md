@@ -80,3 +80,10 @@ Figma：https://www.figma.com/design/mHTKGYHX9PLVKBJAesF5LU/%E3%83%9E%E3%82%B0%E
 
 ### ER図
 https://gyazo.com/cda2e80df10966bd20f5367f50a63fcb
+
+### OGP対応
+SNS等でURLを共有した際に、OGPカード（タイトル/説明/画像）が表示されるように対応済み。
+- OGP画像: `public/ogp.png` (1200x630px推奨)
+- タイトル: 「マグロマップ」
+- 説明: 「配達員向け高単価案件共有アプリ」
+- 本番環境では環境変数 `APP_HOST` を設定することで、OGP画像の絶対URLを制御可能

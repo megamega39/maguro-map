@@ -13,14 +13,14 @@ class Users::RegistrationsController < Devise::RegistrationsController
         sign_up(resource_name, resource)
         respond_to do |format|
           format.html { redirect_to root_path }
-          format.json { render json: { status: 'success', message: 'アカウント登録に成功しました', user: { id: resource.id, email: resource.email, user_name: resource.user_name } } }
+          format.json { render json: { status: "success", message: "アカウント登録に成功しました", user: { id: resource.id, email: resource.email, user_name: resource.user_name } } }
         end
       else
         set_flash_message! :notice, :"signed_up_but_#{resource.inactive_message}"
         expire_data_after_sign_in!
         respond_to do |format|
           format.html { redirect_to root_path }
-          format.json { render json: { status: 'success', message: 'アカウント登録に成功しました。確認メールを送信しました。' } }
+          format.json { render json: { status: "success", message: "アカウント登録に成功しました。確認メールを送信しました。" } }
         end
       end
     else
@@ -28,7 +28,7 @@ class Users::RegistrationsController < Devise::RegistrationsController
       set_minimum_password_length
       respond_to do |format|
         format.html { render :new }
-        format.json { render json: { status: 'error', errors: resource.errors.full_messages }, status: :unprocessable_entity }
+        format.json { render json: { status: "error", errors: resource.errors.full_messages }, status: :unprocessable_entity }
       end
     end
   end
@@ -39,4 +39,3 @@ class Users::RegistrationsController < Devise::RegistrationsController
     params.require(:user).permit(:email, :user_name, :password, :password_confirmation)
   end
 end
-

@@ -4,4 +4,3 @@ class AddShareMapTokenDigestToUsers < ActiveRecord::Migration[7.2]
     add_index :users, :share_map_token_digest
   end
 end
-

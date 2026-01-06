@@ -18,4 +18,3 @@ class CreatePins < ActiveRecord::Migration[7.2]
     add_index :pins, :created_at
   end
 end
-

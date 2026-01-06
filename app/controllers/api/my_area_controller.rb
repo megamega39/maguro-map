@@ -1,9 +1,9 @@
 class Api::MyAreaController < ApplicationController
   # CORS対応
   skip_before_action :verify_authenticity_token
-  
+
   before_action :set_json_format
-  before_action :check_authentication, only: [:show, :update]
+  before_action :check_authentication, only: [ :show, :update ]
 
   # マイエリア情報を取得
   def show
@@ -35,7 +35,7 @@ class Api::MyAreaController < ApplicationController
         }, status: :unauthorized
         return
       end
-      
+
       params_hash = my_area_params
       # パラメータ名をカラム名にマッピング
       update_params = {
@@ -44,7 +44,7 @@ class Api::MyAreaController < ApplicationController
         my_area_zoom: params_hash[:zoom]
       }
       Rails.logger.info "マイエリア更新パラメータ: #{update_params.inspect}, ユーザーID: #{current_user.id}"
-      
+
       if current_user.update(update_params)
         render json: {
           status: "success",
@@ -81,7 +81,7 @@ class Api::MyAreaController < ApplicationController
   def set_json_format
     request.format = :json
   end
-  
+
   def check_authentication
     unless user_signed_in?
       render json: {
@@ -101,6 +101,4 @@ class Api::MyAreaController < ApplicationController
       params.permit(:lat, :lng, :zoom)
     end
   end
-  
 end
-
