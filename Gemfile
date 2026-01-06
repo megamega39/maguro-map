@@ -29,6 +29,8 @@ gem "bcrypt", "~> 3.1.7"
 
 # User authentication
 gem "devise"
+gem "omniauth-google-oauth2"
+gem "omniauth-rails_csrf_protection"
 
 # CORS support for API
 gem "rack-cors"

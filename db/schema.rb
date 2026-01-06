@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.2].define(version: 2024_01_01_000008) do
+ActiveRecord::Schema[7.2].define(version: 2024_01_01_000009) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "plpgsql"
 
@@ -48,7 +48,10 @@ ActiveRecord::Schema[7.2].define(version: 2024_01_01_000008) do
     t.decimal "my_area_zoom", precision: 3, scale: 1, default: "12.0"
     t.string "share_map_token_digest"
     t.integer "role", default: 0, null: false
+    t.string "provider"
+    t.string "uid"
     t.index ["email"], name: "index_users_on_email", unique: true
+    t.index ["provider", "uid"], name: "index_users_on_provider_and_uid", unique: true
     t.index ["reset_password_token"], name: "index_users_on_reset_password_token", unique: true
     t.index ["role"], name: "index_users_on_role"
     t.index ["share_map_token_digest"], name: "index_users_on_share_map_token_digest"
