@@ -7,15 +7,15 @@ class Users::SessionsController < Devise::SessionsController
     set_flash_message!(:notice, :signed_in)
     sign_in(resource_name, resource)
     yield resource if block_given?
-    
+
     respond_to do |format|
       format.html { redirect_to root_path }
-      format.json { render json: { status: 'success', message: 'ログインに成功しました', user: { id: resource.id, email: resource.email, user_name: resource.user_name } } }
+      format.json { render json: { status: "success", message: "ログインに成功しました", user: { id: resource.id, email: resource.email, user_name: resource.user_name } } }
     end
   rescue => e
     respond_to do |format|
-      format.html { redirect_to root_path, alert: 'ログインに失敗しました' }
-      format.json { render json: { status: 'error', errors: ['メールアドレスまたはパスワードが正しくありません'] }, status: :unauthorized }
+      format.html { redirect_to root_path, alert: "ログインに失敗しました" }
+      format.json { render json: { status: "error", errors: [ "メールアドレスまたはパスワードが正しくありません" ] }, status: :unauthorized }
     end
   end
 
@@ -23,10 +23,10 @@ class Users::SessionsController < Devise::SessionsController
     signed_out = (Devise.sign_out_all_scopes ? sign_out : sign_out(resource_name))
     set_flash_message! :notice, :signed_out if signed_out
     yield if block_given?
-    
+
     respond_to do |format|
       format.html { redirect_to root_path }
-      format.json { render json: { status: 'success', message: 'ログアウトしました' } }
+      format.json { render json: { status: "success", message: "ログアウトしました" } }
     end
   end
 
@@ -36,4 +36,3 @@ class Users::SessionsController < Devise::SessionsController
     { scope: resource_name, recall: "#{controller_path}#new" }
   end
 end
-

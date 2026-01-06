@@ -14,10 +14,10 @@ class Api::ShareMapController < ApplicationController
     begin
       # トークンを生成（再発行の場合は既存のトークンを無効化）
       token = current_user.generate_share_map_token!
-      
+
       # 共有URLを生成
       share_url = "#{request.base_url}/?shared=#{token}"
-      
+
       render json: {
         status: "success",
         data: {
@@ -34,4 +34,3 @@ class Api::ShareMapController < ApplicationController
     end
   end
 end
-

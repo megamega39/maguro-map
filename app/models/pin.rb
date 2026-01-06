@@ -1,7 +1,7 @@
 class Pin < ApplicationRecord
   belongs_to :user, optional: true # MVPではuser_idは使わないのでoptional
 
-  enum visibility: { public: 0, private: 1 }, _prefix: :visibility
+  enum :visibility, { public: 0, private: 1 }, prefix: :visibility
 
   validates :price, presence: true, numericality: { only_integer: true, greater_than_or_equal_to: 3000, less_than_or_equal_to: 9999 }
   validates :distance_km, presence: true, numericality: { greater_than_or_equal_to: 0.1, less_than_or_equal_to: 99.9 }
@@ -34,7 +34,7 @@ class Pin < ApplicationRecord
   def private_pin_requires_user
     # enumの値は文字列 'private' または整数値 1 で比較可能
     # visibilityがnilの場合はスキップ（既存ピン対応）
-    if visibility.present? && (visibility == 'private' || visibility == 1) && user_id.blank?
+    if visibility.present? && (visibility == "private" || visibility == 1) && user_id.blank?
       errors.add(:user_id, "プライベートピンにはユーザーIDが必要です")
     end
   end
@@ -43,4 +43,3 @@ class Pin < ApplicationRecord
     self.edited_at = Time.current if changed?
   end
 end
-

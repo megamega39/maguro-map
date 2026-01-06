@@ -4,4 +4,3 @@ class AddRoleToUsers < ActiveRecord::Migration[7.2]
     add_index :users, :role
   end
 end
-

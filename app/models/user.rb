@@ -7,7 +7,7 @@ class User < ApplicationRecord
   has_many :pins, dependent: :destroy
 
   # ロール定義（enum: user=0, admin=1）
-  enum role: { user: 0, admin: 1 }
+  enum :role, { user: 0, admin: 1 }
 
   # Deviseのemail認証を使用するため、user_nameはオプション扱い
   validates :user_name, presence: true, if: -> { new_record? || user_name_changed? }
@@ -28,4 +28,3 @@ class User < ApplicationRecord
     false
   end
 end
-

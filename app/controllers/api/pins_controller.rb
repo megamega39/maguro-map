@@ -29,7 +29,7 @@ class Api::PinsController < ApplicationController
 
     # ピンのパラメータを準備
     pin_attributes = pin_params.merge(delete_token_digest: delete_token_digest)
-    
+
     # visibilityの処理
     # visibilityパラメータが送信されているのにログインしていない場合は401エラー
     if pin_attributes[:visibility].present? && !user_signed_in?
@@ -39,18 +39,18 @@ class Api::PinsController < ApplicationController
       }, status: :unauthorized
       return
     end
-    
+
     if user_signed_in?
       # ログイン中: visibilityを受け取る（デフォルトはpublic）
-      visibility_value = pin_attributes[:visibility] || 'public'
+      visibility_value = pin_attributes[:visibility] || "public"
       # enumは文字列でも整数値でも受け付けるが、明示的に設定
       pin_attributes[:visibility] = visibility_value
       pin_attributes[:user_id] = current_user.id
     else
       # 未ログイン: 強制的にpublic
-      pin_attributes[:visibility] = 'public'
+      pin_attributes[:visibility] = "public"
     end
-    
+
     # visibilityがnilの場合は削除（デフォルト値が適用される）
     pin_attributes.delete(:visibility) if pin_attributes[:visibility].nil?
 
@@ -86,7 +86,7 @@ class Api::PinsController < ApplicationController
   # ピンの編集
   def update
     pin = Pin.find_by(id: params[:id])
-    
+
     unless pin
       render json: {
         status: "error",
@@ -106,7 +106,7 @@ class Api::PinsController < ApplicationController
 
     # 更新パラメータを準備
     update_params = update_pin_params
-    
+
     # 匿名投稿ピン（user_idがnull）の場合は、管理者でもvisibilityを更新しない（公開のみ）
     # 未ログインの場合はvisibilityを更新しない（publicのまま）
     if pin.user_id.nil? || !user_signed_in?
@@ -132,7 +132,7 @@ class Api::PinsController < ApplicationController
   # ピンの削除
   def destroy
     pin = Pin.find_by(id: params[:id])
-    
+
     unless pin
       render json: {
         status: "error",
@@ -287,7 +287,7 @@ class Api::PinsController < ApplicationController
     # 2. 未ログイン時に登録したピン（user_idがnull）の場合：delete_tokenで認証
     delete_token = params[:delete_token]
     return false unless delete_token && pin.delete_token_digest.present?
-    
+
     BCrypt::Password.new(pin.delete_token_digest) == delete_token
   end
 
@@ -333,12 +333,12 @@ class Api::PinsController < ApplicationController
     # visibilityがnilの場合はpublicとして扱う（既存ピン対応）
     # enumの値は整数値（0 = public, 1 = private）なので、nilの場合は0（public）として扱う
     visibility_value = if pin.visibility.nil?
-      'public'
+      "public"
     else
       # enumの値（整数値）を文字列に変換
       pin.visibility
     end
-    
+
     {
       id: pin.id,
       price: pin.price,
@@ -378,4 +378,3 @@ class Api::PinsController < ApplicationController
     }, status: :internal_server_error
   end
 end
-

@@ -5,4 +5,3 @@ class AddMyAreaToUsers < ActiveRecord::Migration[7.2]
     add_column :users, :my_area_zoom, :decimal, precision: 3, scale: 1, default: 12.0
   end
 end
-

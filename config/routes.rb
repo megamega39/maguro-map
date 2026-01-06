@@ -12,13 +12,13 @@ Rails.application.routes.draw do
 
   # Devise routes
   devise_for :users, controllers: {
-    sessions: 'users/sessions',
-    registrations: 'users/registrations'
+    sessions: "users/sessions",
+    registrations: "users/registrations"
   }
 
   # API routes
   namespace :api do
-    resources :pins, only: [:index, :create, :update, :destroy]
+    resources :pins, only: [ :index, :create, :update, :destroy ]
     get "my_area", to: "my_area#show"
     post "my_area", to: "my_area#update"
     post "share_map", to: "share_map#create"
