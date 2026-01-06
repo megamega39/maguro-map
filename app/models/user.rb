@@ -2,7 +2,8 @@ class User < ApplicationRecord
   # Include default devise modules. Others available are:
   # :confirmable, :lockable, :timeoutable, :trackable and :omniauthable
   devise :database_authenticatable, :registerable,
-         :recoverable, :rememberable, :validatable
+         :recoverable, :rememberable, :validatable,
+         :omniauthable, omniauth_providers: [:google_oauth2]
 
   has_many :pins, dependent: :destroy
 
@@ -26,5 +27,38 @@ class User < ApplicationRecord
     BCrypt::Password.new(share_map_token_digest) == token
   rescue BCrypt::Errors::InvalidHash
     false
+  end
+
+  # OmniAuthからユーザーを検索または作成
+  def self.from_omniauth(auth)
+    # メールアドレスが必須
+    unless auth.info&.email.present?
+      raise "Email is required but not provided by OAuth provider"
+    end
+    
+    # providerとuidで既存ユーザーを検索
+    user = find_by(provider: auth.provider, uid: auth.uid)
+    
+    # 見つからない場合、emailで検索
+    if user.nil?
+      user = find_by(email: auth.info.email)
+      # emailが一致する既存ユーザーが見つかった場合、providerとuidを更新
+      if user && (user.provider.blank? || user.uid.blank?)
+        user.update(provider: auth.provider, uid: auth.uid)
+      end
+    end
+    
+    # まだ見つからない場合、新規ユーザーを作成
+    if user.nil?
+      user = create!(
+        email: auth.info.email,
+        user_name: auth.info.name.presence || auth.info.email.split('@').first,
+        provider: auth.provider,
+        uid: auth.uid,
+        password: Devise.friendly_token[0, 20] # ランダムなパスワードを生成
+      )
+    end
+    
+    user
   end
 end
