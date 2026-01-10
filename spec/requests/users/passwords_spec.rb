@@ -6,9 +6,11 @@ RSpec.describe 'Users::Passwords', type: :request do
 
   before do
     # パスワード再設定トークンを生成
-    user.send_reset_password_instructions
+    # send_reset_password_instructionsは生のトークンを返す
+    raw_token = user.send_reset_password_instructions
     user.reload
-    @reset_token = user.reset_password_token
+    # Deviseは生のトークンを返すので、それを使用
+    @reset_token = raw_token
   end
 
   describe 'PUT /users/password' do

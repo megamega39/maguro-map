@@ -286,15 +286,15 @@ Devise.setup do |config|
   # ==> Configuration for :omniauthable
   # OmniAuth is not configured by default. You can configure it if needed.
   # config.omniauth :github, 'APP_ID', 'APP_SECRET', scope: 'user,public_repo'
-  
+
   # OmniAuthのパスプレフィックスを設定
   config.omniauth_path_prefix = "/users/auth"
-  
-  if ENV['GOOGLE_CLIENT_ID'].present? && ENV['GOOGLE_CLIENT_SECRET'].present?
-    config.omniauth :google_oauth2, ENV['GOOGLE_CLIENT_ID'], ENV['GOOGLE_CLIENT_SECRET'], {
-      scope: 'userinfo.email,userinfo.profile',
-      prompt: 'select_account',
-      access_type: 'offline'
+
+  if ENV["GOOGLE_CLIENT_ID"].present? && ENV["GOOGLE_CLIENT_SECRET"].present?
+    config.omniauth :google_oauth2, ENV["GOOGLE_CLIENT_ID"], ENV["GOOGLE_CLIENT_SECRET"], {
+      scope: "userinfo.email,userinfo.profile",
+      prompt: "select_account",
+      access_type: "offline"
     }
   end
 

@@ -43,11 +43,14 @@ Rails.application.configure do
 
   config.action_mailer.default_url_options = { host: "localhost", port: 3000 }
 
+  # Action Controller default URL options (OmniAuthのリダイレクトURI生成に使用)
+  config.action_controller.default_url_options = { host: "localhost", port: 3000 }
+
   # ============================================
   # ローカル開発環境のメール設定
   # 環境変数で設定するか、development.local.rb に記述してください
   # ============================================
-  
+
   # 環境変数またはdevelopment.local.rbから設定を読み込む
   resend_api_key = ENV["RESEND_API_KEY"]
   mailer_from = ENV["MAILER_FROM"]

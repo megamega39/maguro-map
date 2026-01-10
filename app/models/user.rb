@@ -3,7 +3,7 @@ class User < ApplicationRecord
   # :confirmable, :lockable, :timeoutable, :trackable and :omniauthable
   devise :database_authenticatable, :registerable,
          :recoverable, :rememberable, :validatable,
-         :omniauthable, omniauth_providers: [:google_oauth2]
+         :omniauthable, omniauth_providers: [ :google_oauth2 ]
 
   has_many :pins, dependent: :destroy
 
@@ -35,10 +35,10 @@ class User < ApplicationRecord
     unless auth.info&.email.present?
       raise "Email is required but not provided by OAuth provider"
     end
-    
+
     # providerとuidで既存ユーザーを検索
     user = find_by(provider: auth.provider, uid: auth.uid)
-    
+
     # 見つからない場合、emailで検索
     if user.nil?
       user = find_by(email: auth.info.email)
@@ -47,18 +47,18 @@ class User < ApplicationRecord
         user.update(provider: auth.provider, uid: auth.uid)
       end
     end
-    
+
     # まだ見つからない場合、新規ユーザーを作成
     if user.nil?
       user = create!(
         email: auth.info.email,
-        user_name: auth.info.name.presence || auth.info.email.split('@').first,
+        user_name: auth.info.name.presence || auth.info.email.split("@").first,
         provider: auth.provider,
         uid: auth.uid,
         password: Devise.friendly_token[0, 20] # ランダムなパスワードを生成
       )
     end
-    
+
     user
   end
 end
