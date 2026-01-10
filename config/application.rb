@@ -26,5 +26,8 @@ module MaguroMap
 
     # デフォルトロケールを日本語に設定
     config.i18n.default_locale = :ja
+
+    # Rack::Attack ミドルウェアを追加
+    config.middleware.use Rack::Attack
   end
 end

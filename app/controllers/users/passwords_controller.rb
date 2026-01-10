@@ -36,17 +36,22 @@ class Users::PasswordsController < Devise::PasswordsController
   def update
     # トークンからユーザーを取得（まだパスワードは更新していない）
     token = resource_params[:reset_password_token]
-    user = resource_class.with_reset_password_token(token) if token.present?
-    
-    # 現在のパスワードと同じかチェック
-    if user.present? && user.persisted? && resource_params[:password].present?
-      if user.valid_password?(resource_params[:password])
+    new_password = resource_params[:password]
+
+    # トークンが有効な場合のみ、現在のパスワードと同じかチェック
+    if token.present? && new_password.present?
+      # Deviseのメソッドでトークンからユーザーを取得
+      # with_reset_password_tokenは生のトークンを受け取り、ハッシュ化して検索する
+      user = resource_class.with_reset_password_token(token)
+
+      # ユーザーが見つかり、現在のパスワードと同じかチェック
+      if user.present? && user.persisted? && user.valid_password?(new_password)
         # 現在のパスワードと同じ場合はエラーを追加（属性名なしでbaseに追加）
-        error_message = I18n.t('activerecord.errors.models.user.attributes.password.same_as_current')
+        error_message = I18n.t("activerecord.errors.models.user.attributes.password.same_as_current")
         user.errors.add(:base, error_message)
         self.resource = user
         set_minimum_password_length
-        
+
         respond_to do |format|
           format.html { render :edit }
           format.json do
@@ -70,9 +75,9 @@ class Users::PasswordsController < Devise::PasswordsController
       else
         set_flash_message!(:notice, :updated_not_active)
       end
-      
+
       respond_to do |format|
-        format.html { redirect_to root_path(login: 'success'), notice: "パスワードを変更しました。" }
+        format.html { redirect_to root_path(login: "success"), notice: "パスワードを変更しました。" }
         format.json { render json: { status: "success", message: "パスワードを変更しました。" } }
       end
     else

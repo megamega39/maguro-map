@@ -85,6 +85,11 @@ Rails.application.configure do
   # Action Mailer default URL options
   config.action_mailer.default_url_options = { host: ENV.fetch("APP_HOST", "maguro-map.com").gsub(/^https?:\/\//, ""), protocol: "https" }
 
+  # Action Controller default URL options (OmniAuthのリダイレクトURI生成に使用)
+  # リバースプロキシの背後で実行される場合、request.hostが正しくない可能性があるため、
+  # 明示的にホストを設定する
+  config.action_controller.default_url_options = { host: ENV.fetch("APP_HOST", "maguro-map.com").gsub(/^https?:\/\//, ""), protocol: "https" }
+
   # Resend SMTP configuration
   # ビルド時（assets:precompile）には環境変数が設定されていない可能性があるため、
   # 実行時のみSMTP設定を行う
